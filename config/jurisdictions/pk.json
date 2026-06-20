@@ -1,0 +1,21 @@
+{
+  "jurisdiction_code": "pk",
+  "currency": "PKR",
+  "default_tax_rates": [
+    { "name": "GST 17%", "rate_percent": 17, "is_default": true },
+    { "name": "GST 0% (Exempt)", "rate_percent": 0, "is_default": false }
+  ],
+  "default_chart_of_accounts": [
+    { "code": "1010", "name": "Cash", "type": "asset" },
+    { "code": "1020", "name": "Bank Account", "type": "asset" },
+    { "code": "1200", "name": "Accounts Receivable", "type": "asset" },
+    { "code": "2010", "name": "Accounts Payable", "type": "liability" },
+    { "code": "2200", "name": "GST Payable", "type": "liability" },
+    { "code": "3000", "name": "Owner's Equity", "type": "equity" },
+    { "code": "4000", "name": "Sales Revenue", "type": "revenue" },
+    { "code": "5000", "name": "Cost of Goods Sold", "type": "expense" },
+    { "code": "5100", "name": "Utilities", "type": "expense" },
+    { "code": "5200", "name": "Rent", "type": "expense" }
+  ],
+  "fiscal_year_start_month": 7
+}

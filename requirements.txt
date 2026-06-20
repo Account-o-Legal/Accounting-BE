@@ -1,0 +1,33 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic-settings==2.6.0
+sqlmodel==0.0.22
+sqlalchemy[asyncio]==2.0.49
+asyncpg
+alembic==1.14.0
+python-ulid==2.7.0
+
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+pyotp==2.9.0
+
+redis==5.2.0
+arq==0.26.1
+
+boto3==1.35.0
+
+anthropic==0.40.0
+
+structlog==24.4.0
+opentelemetry-sdk==1.28.0
+opentelemetry-instrumentation-fastapi==0.49b0
+opentelemetry-instrumentation-sqlalchemy==0.49b0
+
+# ponytail: deliberately NOT here — add when their phase starts:
+#   stripe / jazzcash sdk     -> billing checkout (currently stubbed)
+#   weasyprint                -> report_worker PDF rendering
+#   forex-python or similar   -> V2 multi-currency
+
+pytest==8.3.0
+pytest-asyncio==0.24.0
+httpx==0.27.0

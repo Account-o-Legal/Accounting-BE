@@ -1,0 +1,26 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    volumes: ["./infra/observability/otel-collector-config.yaml:/etc/otelcol/config.yaml"]
+    ports: ["4317:4317"]
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes: ["./infra/observability/prometheus.yaml:/etc/prometheus/prometheus.yml"]
+    ports: ["9090:9090"]
+
+  loki:
+    image: grafana/loki:latest
+    ports: ["3100:3100"]
+
+  tempo:
+    image: grafana/tempo:latest
+    ports: ["3200:3200"]
+
+  grafana:
+    image: grafana/grafana:latest
+    ports: ["3000:3000"]
+    volumes: ["./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards"]
+
+# Run alongside the main stack with:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up
