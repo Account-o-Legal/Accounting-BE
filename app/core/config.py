@@ -24,6 +24,9 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None  # ai module, narrow usage only
 
+    clamav_host: str = "clamav"  # service name in docker-compose, override for local non-compose dev
+    clamav_port: int = 3310
+
     default_jurisdiction: str = "pk"
 
     class Config:

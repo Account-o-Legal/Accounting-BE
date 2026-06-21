@@ -10,10 +10,11 @@ from arq.connections import ArqRedis, RedisSettings
 from app.core.config import settings
 from app.workers.import_worker import process_bank_statement
 from app.workers.report_worker import generate_report
+from app.workers.scan_worker import scan_file
 
 
 class WorkerSettings:
-    functions = [process_bank_statement, generate_report]
+    functions = [process_bank_statement, generate_report, scan_file]
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
 
 

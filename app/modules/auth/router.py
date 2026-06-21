@@ -7,6 +7,7 @@ calls — returns every client the logged-in accountant has access to.
 from fastapi import APIRouter
 from sqlmodel import select
 
+from app.core.audit import record_audit_event
 from app.core.security import create_jwt, hash_password, verify_password
 from app.dependencies import CurrentUser, DbSession
 from app.modules.accounting_core.seed import find_account_by_code, seed_chart_of_accounts
@@ -51,6 +52,18 @@ async def register(body: RegisterRequest, db: DbSession):
     # silently skips creating a default BankAccount rather than failing
     # registration — a missing default account shouldn't block onboarding,
     # the accountant can add a bank account manually in that edge case.
+
+    # Actor is the new user themselves — there's no other logged-in
+    # identity to attribute workspace creation to at registration time.
+    await record_audit_event(
+        db,
+        tenant_id=workspace.id,
+        actor_user_id=user.id,
+        entity_type="workspace",
+        entity_id=workspace.id,
+        action="create",
+        diff_json=f'{{"name": "{workspace.name}", "jurisdiction_code": "{workspace.jurisdiction_code}"}}',
+    )
 
     await db.commit()
     token = create_jwt(user.id, [workspace.id], role="owner")

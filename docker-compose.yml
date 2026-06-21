@@ -8,7 +8,9 @@ services:
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
     depends_on: [db, redis, minio]
-    volumes: ["./app:/app/app"]
+    volumes:
+      - "./app:/app/app"
+      - "./alembic:/app/alembic"
 
   worker:
     build: .
@@ -18,7 +20,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/accounting
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
-    depends_on: [db, redis, minio]
+      CLAMAV_HOST: clamav
+    depends_on: [db, redis, minio, clamav]
 
   db:
     image: postgres:16-alpine
@@ -44,7 +47,21 @@ services:
     # FIX: Map a volume so your files and buckets aren't wiped on restart
     volumes: ["miniodata:/data"]
 
+  clamav:
+    image: clamav/clamav:latest
+    ports: ["3310:3310"]
+    volumes: ["clamavdata:/var/lib/clamav"]
+    # ponytail: first boot downloads the full virus-definition database —
+    # expect several minutes before clamd actually starts accepting
+    # connections. Check readiness with: docker compose logs -f clamav
+    # and wait for "clamd started" before testing uploads. The worker
+    # service depends_on this, but depends_on only waits for container
+    # start, not for clamd to finish loading signatures — if scan_worker
+    # fails with a connection error right after `docker compose up`,
+    # that's why; just wait and retry.
+
 volumes:
   pgdata:
   miniodata: # Declared the persistent volume for MinIO
+  clamavdata:
   # redisdata: # Un-comment if using persistent Redis
