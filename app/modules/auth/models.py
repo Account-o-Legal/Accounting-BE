@@ -6,6 +6,7 @@ can belong to many workspaces (their clients' books). WorkspaceMember is
 the join table the workspace switcher reads from.
 """
 
+import sqlalchemy as sa
 from sqlmodel import Field, SQLModel, UniqueConstraint
 
 from app.core.enums import Role
@@ -35,14 +36,25 @@ class Workspace(ULIDMixin, TimestampMixin, SQLModel, table=True):
 
 class WorkspaceMember(ULIDMixin, SQLModel, table=True):
     """Join table: which users can access which workspaces, with what role.
-    This is what the workspace switcher queries to populate the dropdown."""
+    This is what the workspace switcher queries to populate the dropdown.
+
+    ponytail: role is typed as the Role StrEnum for Python-side validation,
+    but stored as a plain VARCHAR (sa_type=sa.String), not a native
+    Postgres ENUM. SQLModel defaults Enum fields to sa.Enum(), which
+    requires a CREATE TYPE in the migration — our hand-written migration
+    never created one (every status/role column was written as
+    sa.String). A native enum type would need its own migration (and a
+    real ALTER TYPE migration every time a role is added); a VARCHAR with
+    Python-side enum validation is the cheaper, equally-safe choice at
+    this scale, and it's what every migration already assumes.
+    """
 
     __tablename__ = "workspace_members"
     __table_args__ = (UniqueConstraint("user_id", "workspace_id"),)
 
     user_id: str = Field(foreign_key="users.id", index=True)
     workspace_id: str = Field(foreign_key="workspaces.id", index=True)
-    role: Role = Field(default=Role.VIEWER)
+    role: Role = Field(default=Role.VIEWER, sa_type=sa.String)
 
 
 # --- Request/response shapes ---

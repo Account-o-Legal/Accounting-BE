@@ -1,5 +1,6 @@
 from datetime import date
 
+import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
 
 from app.core.enums import InvoiceStatus
@@ -21,7 +22,11 @@ class Invoice(ULIDMixin, TenantMixin, TimestampMixin, SQLModel, table=True):
     invoice_number: str
     issue_date: date
     due_date: date
-    status: InvoiceStatus = Field(default=InvoiceStatus.DRAFT)
+    # ponytail: sa_type=sa.String — same reasoning as JournalEntry.status
+    # and WorkspaceMember.role. No CREATE TYPE in the migration for any of
+    # these, so the column has to stay plain VARCHAR; Python-side validation
+    # via InvoiceStatus is unaffected.
+    status: InvoiceStatus = Field(default=InvoiceStatus.DRAFT, sa_type=sa.String)
     # ponytail: currency is a fixed field, not an FX module — MVP scope is
     # single-currency (PKR). Multi-currency conversion logic deferred to V2;
     # adding the column now avoids a painful migration later.

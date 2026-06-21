@@ -11,6 +11,7 @@ table. See sales/models.py for the pattern.
 
 from datetime import datetime, timezone
 
+from sqlalchemy import DateTime
 from sqlmodel import Field
 from ulid import ULID
 
@@ -29,8 +30,19 @@ class TenantMixin:
 
 
 class TimestampMixin:
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # sa_type=DateTime(timezone=True) is required here, not optional:
+    # default_factory produces tz-aware datetime.now(timezone.utc) values,
+    # and without an explicit timezone-aware column type SQLModel/SQLAlchemy
+    # silently maps datetime -> TIMESTAMP WITHOUT TIME ZONE. Postgres then
+    # rejects the insert ("can't subtract offset-naive and offset-aware
+    # datetimes") because the Python value carries tzinfo and the column
+    # doesn't accept it.
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=True),
+    )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=True),
         sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
     )

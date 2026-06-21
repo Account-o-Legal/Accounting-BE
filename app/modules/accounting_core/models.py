@@ -10,6 +10,7 @@ parallel Pydantic model — see JournalEntryCreate at the bottom.
 
 from datetime import date
 
+import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
 
 from app.core.enums import JournalEntryStatus
@@ -33,7 +34,12 @@ class JournalEntry(ULIDMixin, TenantMixin, TimestampMixin, SQLModel, table=True)
 
     entry_date: date
     memo: str | None = None
-    status: JournalEntryStatus = Field(default=JournalEntryStatus.DRAFT)
+    # ponytail: sa_type=sa.String, not a native Postgres ENUM. SQLModel
+    # defaults Enum fields to sa.Enum(), which needs a CREATE TYPE the
+    # migration never wrote (every status/role column there is plain
+    # VARCHAR). Python-side validation still comes from JournalEntryStatus;
+    # only the storage representation changes. Same fix as WorkspaceMember.role.
+    status: JournalEntryStatus = Field(default=JournalEntryStatus.DRAFT, sa_type=sa.String)
     # source distinguishes AI-suggested vs manually entered — feeds the
     # "approve AI suggestion" review queue UX and the confidence metric.
     source: str = Field(default="manual")  # manual | ai_suggested | import

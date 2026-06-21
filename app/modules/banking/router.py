@@ -23,8 +23,15 @@ async def import_statement(file: UploadFile, workspace: ActiveWorkspace):
     request thread. See workers/import_worker.py for the categorization
     pipeline (rules first, LLM fallback second)."""
     from app.workers.main import import_queue  # ponytail: lazy import avoids worker startup cost on every API boot
-    job_id = await import_queue.enqueue_job("process_bank_statement", workspace, await file.read())
-    return {"job_id": job_id, "status": "queued"}
+
+    # ponytail: arq's enqueue_job() returns a Job object, not a plain id —
+    # the response body needs the string .job_id, not the Job itself
+    # (FastAPI's jsonable_encoder can't serialize an arq Job: it's neither
+    # iterable nor a plain dataclass with __dict__).
+    job = await import_queue.enqueue_job(
+        "process_bank_statement", workspace, await file.read()
+    )
+    return {"job_id": job.job_id, "status": "queued"}
 
 
 @router.get("/review-queue")

@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     jwt_secret: str
     s3_bucket: str
     s3_endpoint: str | None = None  # MinIO in dev, unset = real AWS
+    # MinIO/S3 credentials. Optional because real AWS deployments typically
+    # use IAM roles instead of static keys — only required when s3_endpoint
+    # points at MinIO in local/dev.
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
 
     anthropic_api_key: str | None = None  # ai module, narrow usage only
 

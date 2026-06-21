@@ -22,12 +22,18 @@ from app.modules.ai.router import router as ai_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    setup_observability(app)
+    # ponytail: setup_observability moved OUT of here — it calls
+    # FastAPIInstrumentor.instrument_app(app), which internally calls
+    # app.add_middleware(). Starlette refuses to register middleware once
+    # the app has started serving requests, and the lifespan context only
+    # runs *after* startup begins — so this has to happen before the app
+    # object is even handed to uvicorn, not inside this hook.
     yield
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
+setup_observability(app)
 register_exception_handlers(app)
 
 # ponytail: rate limiting deferred — add SlowAPI/Redis middleware here once
