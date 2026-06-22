@@ -31,6 +31,9 @@ class Invoice(ULIDMixin, TenantMixin, TimestampMixin, SQLModel, table=True):
     # single-currency (PKR). Multi-currency conversion logic deferred to V2;
     # adding the column now avoids a painful migration later.
     currency: str = Field(default="PKR")
+    # journal_entry_id links to the AR/Revenue/Tax posting created at
+    # invoice creation time (see sales/services.py). None until posted.
+    journal_entry_id: str | None = None
 
 
 class InvoiceLine(ULIDMixin, SQLModel, table=True):
@@ -49,6 +52,11 @@ class InvoiceLineCreate(SQLModel):
     description: str
     quantity: float = 1
     unit_price: float
+    # ponytail: this field was missing entirely before — InvoiceLine (the
+    # table) has tax_rate_id, but the create schema never exposed it, so
+    # there was no way to actually request GST on a line through the API.
+    # Fixed alongside the ledger-posting gap, since GST posting needs it.
+    tax_rate_id: str | None = None
 
 
 class InvoiceCreate(SQLModel):
