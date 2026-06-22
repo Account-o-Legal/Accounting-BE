@@ -36,7 +36,7 @@ async def post_journal_entry(
     await ensure_period_open(
         db,
         tenant_id=tenant_id,
-        entry_date=entry.entry_date,
+        posting_date=entry.entry_date,
     )
     entry.tenant_id = tenant_id
     entry.status = JournalEntryStatus.POSTED
