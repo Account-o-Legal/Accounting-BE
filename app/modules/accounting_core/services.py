@@ -17,7 +17,7 @@ from app.core.enums import JournalEntryStatus
 from app.core.exceptions import UnbalancedEntryError
 from app.modules.accounting_core.models import JournalEntry, JournalLine
 from app.observability.otel import journal_entries_posted
-
+from app.modules.accounting_core.periods import ensure_period_open
 
 async def post_journal_entry(
     db: AsyncSession,
@@ -33,7 +33,11 @@ async def post_journal_entry(
         raise UnbalancedEntryError(
             f"Entry does not balance: debit={total_debit} credit={total_credit}"
         )
-
+    await ensure_period_open(
+        db,
+        tenant_id=tenant_id,
+        entry_date=entry.entry_date,
+    )
     entry.tenant_id = tenant_id
     entry.status = JournalEntryStatus.POSTED
     db.add(entry)

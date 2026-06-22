@@ -17,7 +17,7 @@ from datetime import date
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-
+from app.modules.accounting_core.periods import ensure_period_open
 from app.core.audit import record_audit_event
 from app.core.enums import JournalEntryStatus
 from app.core.exceptions import NotFoundError, ValidationError
@@ -50,12 +50,17 @@ async def void_journal_entry(
     and an already-void entry can't be voided (nothing to undo twice).
     """
     original = (
-        await db.exec(
+    (
+        await db.execute(
             select(JournalEntry).where(
-                JournalEntry.id == entry_id, JournalEntry.tenant_id == tenant_id
+                JournalEntry.id == entry_id,
+                JournalEntry.tenant_id == tenant_id,
             )
         )
-    ).first()
+    )
+        .scalars()
+        .first()
+    )
     if not original:
         raise NotFoundError("Journal entry not found")
     if original.status != JournalEntryStatus.POSTED:
@@ -64,13 +69,29 @@ async def void_journal_entry(
         )
 
     original_lines = (
-        await db.exec(select(JournalLine).where(JournalLine.journal_entry_id == entry_id))
-    ).all()
+    (
+        await db.execute(
+            select(JournalLine).where(
+                JournalLine.journal_entry_id == entry_id
+            )
+        )
+    )
+        .scalars()
+        .all()
+    )
     if not original_lines:
         # Shouldn't be reachable given post_journal_entry's invariants,
         # but fail loudly rather than silently post an empty/no-op
         # reversal if it somehow is.
         raise ValidationError("Original entry has no lines — nothing to reverse")
+
+    effective_date = reversal_date or date.today()
+
+    await ensure_period_open(
+        db,
+        tenant_id=tenant_id,
+        entry_date=effective_date,
+    )
 
     reversal_lines = [
         JournalLine(account_id=line.account_id, debit=line.credit, credit=line.debit)
@@ -83,7 +104,7 @@ async def void_journal_entry(
 
     reversal_entry = JournalEntry(
         tenant_id=tenant_id,
-        entry_date=reversal_date or date.today(),
+        entry_date=effective_date,
         memo=memo,
         source="reversal",
     )
