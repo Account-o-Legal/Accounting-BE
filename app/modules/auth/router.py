@@ -5,9 +5,11 @@ calls — returns every client the logged-in accountant has access to.
 """
 
 from fastapi import APIRouter
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from app.core.audit import record_audit_event
+from app.core.exceptions import ConflictError, UnauthorizedError
 from app.core.security import create_jwt, hash_password, verify_password
 from app.dependencies import CurrentUser, DbSession
 from app.modules.accounting_core.seed import find_account_by_code, seed_chart_of_accounts
@@ -26,6 +28,19 @@ router = APIRouter()
 
 @router.post("/register")
 async def register(body: RegisterRequest, db: DbSession):
+    # ponytail: check-then-insert instead of catching IntegrityError after
+    # the fact — this is a deliberate choice over try/except around the
+    # whole flush+commit. The CoA-seeding + BankAccount + audit-event
+    # writes below all happen in the same transaction as the user/workspace
+    # insert; catching IntegrityError after a failed flush would leave
+    # the session in a state where those statements can't safely run
+    # without a rollback first, which adds more complexity than a single
+    # upfront existence check for the one actually-likely conflict
+    # (duplicate email).
+    existing = (await db.exec(select(User).where(User.email == body.email))).first()
+    if existing:
+        raise ConflictError(f"An account with email '{body.email}' already exists")
+
     user = User(email=body.email, password_hash=hash_password(body.password))
     workspace = Workspace(name=body.workspace_name)
     db.add(user)
@@ -74,7 +89,6 @@ async def register(body: RegisterRequest, db: DbSession):
 async def login(body: LoginRequest, db: DbSession):
     user = (await db.exec(select(User).where(User.email == body.email))).first()
     if not user or not verify_password(body.password, user.password_hash):
-        from app.core.exceptions import UnauthorizedError
         raise UnauthorizedError("Invalid credentials")
 
     memberships = (

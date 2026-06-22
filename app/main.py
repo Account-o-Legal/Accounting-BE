@@ -18,6 +18,7 @@ from app.modules.reporting.router import router as reporting_router
 from app.modules.files.router import router as files_router
 from app.modules.billing.router import router as billing_router
 from app.modules.ai.router import router as ai_router
+from app.modules.audit.router import router as audit_router
 
 
 @asynccontextmanager
@@ -51,6 +52,7 @@ app.include_router(reporting_router, prefix="/v1/reports", tags=["reporting"])
 app.include_router(files_router, prefix="/v1/files", tags=["files"])
 app.include_router(billing_router, prefix="/v1/billing", tags=["billing"])
 app.include_router(ai_router, prefix="/v1/ai", tags=["ai"])
+app.include_router(audit_router, prefix="/v1/audit", tags=["audit"])
 
 
 @app.get("/healthz")

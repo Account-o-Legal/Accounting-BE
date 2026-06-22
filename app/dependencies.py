@@ -10,6 +10,7 @@ frontend's workspace switcher) carries the "which client" part.
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.security import decode_jwt
@@ -39,6 +40,42 @@ async def get_active_workspace(
     return x_workspace_id
 
 
+async def require_workspace_admin(
+    workspace: Annotated[str, Depends(get_active_workspace)],
+    user: Annotated[dict, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> str:
+    """Stricter version of get_active_workspace: confirms the caller's
+    role IN THIS SPECIFIC WORKSPACE is owner/admin, not just that they're
+    a member.
+
+    This deliberately re-queries WorkspaceMember rather than trusting
+    user["role"] from the JWT — that field is only the role in whichever
+    workspace was first in the list at login time (see auth/router.py's
+    login()), not the role in the currently-active workspace. An
+    accountant who is owner on Client A and viewer on Client B must be
+    blocked here when X-Workspace-Id points at Client B, even though
+    their JWT might say role=owner from a Client-A-first login.
+    """
+    from app.modules.auth.models import WorkspaceMember  # local import: avoids a
+    # circular import (auth.models -> dependencies is not a thing today, but
+    # dependencies -> auth.models at module load time would be, since
+    # auth/router.py imports from dependencies).
+
+    membership = (
+        await db.exec(
+            select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == workspace,
+                WorkspaceMember.user_id == user["sub"],
+            )
+        )
+    ).first()
+    if not membership or membership.role not in ("owner", "admin"):
+        raise HTTPException(403, "This action requires owner or admin access to this workspace")
+    return workspace
+
+
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 ActiveWorkspace = Annotated[str, Depends(get_active_workspace)]
+AdminWorkspace = Annotated[str, Depends(require_workspace_admin)]
 DbSession = Annotated[AsyncSession, Depends(get_db)]

@@ -5,16 +5,17 @@ POST /journal-entries for manual entries.
 
 ponytail: this is the minimum surface to unblock the API from crashing on
 import (main.py expects accounting_core.router to exist) and to let a
-human create a manual journal entry from the UI. No PATCH/void endpoint
-yet — entries are posted, period-end reversal/voiding is a real feature
-but not an MVP one; add it when "I made a mistake" support tickets show
-it's needed, not before.
+human create a manual journal entry from the UI.
 """
 
+from datetime import date
+
 from fastapi import APIRouter
+from pydantic import BaseModel
 from sqlmodel import select
 
-from app.dependencies import ActiveWorkspace, CurrentUser, DbSession
+from app.core.exceptions import NotFoundError
+from app.dependencies import ActiveWorkspace, AdminWorkspace, CurrentUser, DbSession
 from app.modules.accounting_core.models import (
     Account,
     AccountingPeriod,
@@ -23,8 +24,17 @@ from app.modules.accounting_core.models import (
     JournalLine,
 )
 from app.modules.accounting_core.services import post_journal_entry
+from app.modules.accounting_core.void import void_journal_entry
 
 router = APIRouter()
+
+
+class VoidJournalEntryRequest(BaseModel):
+    # ponytail: explicit opt-in, not a silent default — see
+    # void_journal_entry's docstring for why backdating a reversal is a
+    # real compliance hazard, not just a style preference.
+    reversal_date: date | None = None
+    reason: str | None = None
 
 
 @router.get("/accounts")
@@ -75,8 +85,6 @@ async def get_journal_entry(entry_id: str, workspace: ActiveWorkspace, db: DbSes
         )
     ).first()
     if not entry:
-        from app.core.exceptions import NotFoundError
-
         raise NotFoundError("Journal entry not found")
 
     lines = (
@@ -85,6 +93,33 @@ async def get_journal_entry(entry_id: str, workspace: ActiveWorkspace, db: DbSes
         )
     ).all()
     return {"entry": entry, "lines": lines}
+
+
+@router.post("/journal-entries/{entry_id}/void")
+async def void_entry(
+    entry_id: str,
+    workspace: AdminWorkspace,
+    user: CurrentUser,
+    db: DbSession,
+    body: VoidJournalEntryRequest = VoidJournalEntryRequest(),
+):
+    """Owner/admin only (see AdminWorkspace / require_workspace_admin)
+    — voiding affects the ledger and historical reports, not something
+    a bookkeeper or viewer role should be able to trigger unsupervised.
+
+    Never deletes or mutates the original entry: marks it VOID and posts
+    a separate reversing entry. See void_journal_entry's docstring for
+    the reasoning behind the date default.
+    """
+    voided = await void_journal_entry(
+        db,
+        tenant_id=workspace,
+        actor_user_id=user["sub"],
+        entry_id=entry_id,
+        reversal_date=body.reversal_date,
+        reason=body.reason,
+    )
+    return {"id": voided.id, "status": voided.status}
 
 
 @router.get("/periods")

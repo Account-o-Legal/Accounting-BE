@@ -1,6 +1,17 @@
-"""Report aggregation. Every function here reads only POSTED journal
-entries — draft/void entries never appear in a report, by construction
-(filtered at the query level, not trusted to the caller to remember).
+"""Report aggregation. Every function here reads POSTED and VOID journal
+entries — never DRAFT (a real status, used for entries awaiting human
+approval that have no business appearing in any report at all).
+
+VOID entries are deliberately included, not excluded: a voided entry and
+its reversal are both real postings that happened, and showing both
+(rather than making the original silently vanish) is the standard an
+auditor or FBR review expects — "this was recorded, then reversed" is
+visible history, not erased history. Because a reversal is always the
+exact mirror image of the entry it reverses (see
+accounting_core/void.py), including both in the same aggregation
+naturally nets every affected account back to its pre-error balance —
+no special-case "void doesn't count" logic needed; it falls out of the
+arithmetic for free.
 
 This is the proof step for the whole ledger: if double-entry posting
 (accounting_core/services.py) and transaction approval (banking/router.py)
@@ -24,6 +35,10 @@ from app.modules.accounting_core.models import Account, JournalEntry, JournalLin
 _CREDIT_NORMAL_TYPES = {"liability", "equity", "revenue"}
 _DEBIT_NORMAL_TYPES = {"asset", "expense"}
 
+# Entries in these statuses are real, recorded history — DRAFT is the
+# only status excluded (entries awaiting approval, never actually posted).
+_REPORTABLE_STATUSES = (JournalEntryStatus.POSTED, JournalEntryStatus.VOID)
+
 
 async def _posted_lines_with_accounts(
     db: AsyncSession,
@@ -32,11 +47,11 @@ async def _posted_lines_with_accounts(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> list[tuple[JournalLine, Account]]:
-    """Shared base query: every JournalLine belonging to a POSTED entry
-    for this tenant, joined to its Account, optionally bounded by entry
-    date. Every report function below is a different grouping of this
-    same result set — kept as one query helper so "only posted, only
-    this tenant" can't drift between reports.
+    """Shared base query: every JournalLine belonging to a POSTED or VOID
+    entry for this tenant, joined to its Account, optionally bounded by
+    entry date. Every report function below is a different grouping of
+    this same result set — kept as one query helper so "which statuses
+    count" can't drift between reports.
     """
     query = (
         select(JournalLine, Account)
@@ -44,7 +59,7 @@ async def _posted_lines_with_accounts(
         .join(Account, JournalLine.account_id == Account.id)
         .where(
             JournalEntry.tenant_id == tenant_id,
-            JournalEntry.status == JournalEntryStatus.POSTED,
+            JournalEntry.status.in_(_REPORTABLE_STATUSES),
         )
     )
     if start_date is not None:

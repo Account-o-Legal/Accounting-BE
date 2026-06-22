@@ -21,6 +21,14 @@ class UnauthorizedError(AppException):
     status_code = 401
 
 
+class ConflictError(AppException):
+    """Raised when a request conflicts with existing state — e.g.
+    registering with an email that's already taken. 409, not 422: the
+    request itself is well-formed, it just can't be applied right now."""
+
+    status_code = 409
+
+
 class UnbalancedEntryError(AppException):
     """Raised when a journal entry's debits != credits. Never silently fix."""
 
