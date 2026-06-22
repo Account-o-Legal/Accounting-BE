@@ -71,15 +71,27 @@ async def _posted_lines_with_accounts(
     return list(result.all())
 
 
-async def generate_trial_balance(db: AsyncSession, *, tenant_id: str) -> dict:
+async def generate_trial_balance(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> dict:
     """Every account with posted activity, its total debits/credits, and
-    a signed balance. The ledger is only correct if
-    sum(all account balances, debit-normal positive / credit-normal
-    negative) nets to zero — that's what test_trial_balance.py checks.
+    a signed balance. Optional date filters allow period-specific trial
+    balances while preserving the invariant that total debits must equal
+    total credits.
     """
-    rows = await _posted_lines_with_accounts(db, tenant_id=tenant_id)
+    rows = await _posted_lines_with_accounts(
+        db,
+        tenant_id=tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
     totals: dict[str, dict] = {}
+
     for line, account in rows:
         bucket = totals.setdefault(
             account.id,
@@ -92,24 +104,39 @@ async def generate_trial_balance(db: AsyncSession, *, tenant_id: str) -> dict:
                 "credit": 0.0,
             },
         )
+
         bucket["debit"] += line.debit
         bucket["credit"] += line.credit
 
-    accounts = sorted(totals.values(), key=lambda a: a["code"])
-    for account in accounts:
-        account["balance"] = round(account["debit"] - account["credit"], 2)
+    accounts = sorted(
+        totals.values(),
+        key=lambda a: a["code"],
+    )
 
-    total_debit = round(sum(a["debit"] for a in accounts), 2)
-    total_credit = round(sum(a["credit"] for a in accounts), 2)
+    for account in accounts:
+        account["balance"] = round(
+            account["debit"] - account["credit"],
+            2,
+        )
+
+    total_debit = round(
+        sum(a["debit"] for a in accounts),
+        2,
+    )
+    total_credit = round(
+        sum(a["credit"] for a in accounts),
+        2,
+    )
 
     return {
         "tenant_id": tenant_id,
+        "start_date": start_date,
+        "end_date": end_date,
         "accounts": accounts,
         "total_debit": total_debit,
         "total_credit": total_credit,
         "is_balanced": total_debit == total_credit,
     }
-
 
 async def generate_profit_and_loss(
     db: AsyncSession,
@@ -161,7 +188,18 @@ async def generate_profit_and_loss(
     }
 
 
-async def generate_balance_sheet(db: AsyncSession, *, tenant_id: str, as_of: date | None = None) -> dict:
+async def generate_balance_sheet(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    as_of_date: date | None = None,
+) -> dict:
+    rows = await _posted_lines_with_accounts(
+        db,
+        tenant_id=tenant_id,
+        end_date=as_of_date,
+    )
+
     """Asset, liability, and equity accounts, as of a point in time
     (defaults to all posted activity to date — no end_date filter means
     "everything up to now").
@@ -182,7 +220,6 @@ async def generate_balance_sheet(db: AsyncSession, *, tenant_id: str, as_of: dat
     write to, rather than recomputing P&L at report time — that's the
     "real" implementation; this is the correct interim one.
     """
-    rows = await _posted_lines_with_accounts(db, tenant_id=tenant_id, end_date=as_of)
 
     asset_by_account: dict[str, float] = defaultdict(float)
     liability_by_account: dict[str, float] = defaultdict(float)
@@ -194,6 +231,7 @@ async def generate_balance_sheet(db: AsyncSession, *, tenant_id: str, as_of: dat
 
     for line, account in rows:
         account_names[account.id] = account.name
+
         if account.type == "asset":
             asset_by_account[account.id] += line.debit - line.credit
         elif account.type == "liability":
@@ -207,12 +245,21 @@ async def generate_balance_sheet(db: AsyncSession, *, tenant_id: str, as_of: dat
 
     def _as_lines(by_account: dict[str, float]) -> list[dict]:
         return [
-            {"account_id": acc_id, "name": account_names[acc_id], "amount": round(amt, 2)}
-            for acc_id, amt in by_account.items()
+            {
+                "account_id": acc_id,
+                "name": account_names[acc_id],
+                "amount": round(amount, 2),
+            }
+            for acc_id, amount in by_account.items()
         ]
 
     equity_lines = _as_lines(equity_by_account)
-    current_period_net_income = round(total_revenue - total_expenses, 2)
+
+    current_period_net_income = round(
+        total_revenue - total_expenses,
+        2,
+    )
+
     if current_period_net_income != 0:
         equity_lines.append(
             {
@@ -222,11 +269,14 @@ async def generate_balance_sheet(db: AsyncSession, *, tenant_id: str, as_of: dat
             }
         )
 
-    total_equity = round(sum(equity_by_account.values()) + current_period_net_income, 2)
+    total_equity = round(
+        sum(equity_by_account.values()) + current_period_net_income,
+        2,
+    )
 
     return {
         "tenant_id": tenant_id,
-        "as_of": as_of,
+        "as_of": as_of_date,
         "assets": _as_lines(asset_by_account),
         "liabilities": _as_lines(liability_by_account),
         "equity": equity_lines,
